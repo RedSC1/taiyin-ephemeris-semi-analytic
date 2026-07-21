@@ -54,6 +54,12 @@ class EphemerisTests(unittest.TestCase):
         for left, right in zip(actual, expected):
             self.assertAlmostEqual(left, right, delta=1.0e-10)
 
+    def test_p03_date_ecliptic_to_j2000_regression(self):
+        expected = (0.955335336627986, -0.30200214694055044, 400000.0)
+        actual = ephemeris._date_ecliptic_to_j2000(10.0, 1.2, -0.3, 400000.0)
+        for left, right in zip(actual, expected):
+            self.assertAlmostEqual(left, right, delta=1.0e-13)
+
     def test_earth_moon_barycenter_identity(self):
         epoch = 2451545.0
         earth = ephemeris.position(epoch, 399)

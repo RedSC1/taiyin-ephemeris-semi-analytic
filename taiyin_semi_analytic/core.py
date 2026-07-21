@@ -231,45 +231,77 @@ def _planet_ecliptic(body_id: int, jd_tdb: float) -> tuple[float, float, float]:
     )
 
 
-_P03 = {
-    "fi": (0.0, 5038.481507, -1.0790069, -0.00114045, 0.000132851, -9.51e-8),
-    "w": (84381.406, -0.025754, 0.0512623, -0.00772503, -4.67e-7, 3.337e-7),
-    "E": (84381.406, -46.836769, -0.0001831, 0.00200340, -5.76e-7, -4.34e-8),
-    "x": (0.0, 10.556403, -2.3814292, -0.00121197, 0.000170663, -5.60e-8),
+# P03 ecliptic-precession angles in arcseconds.  See Capitaine, Wallace &
+# Chapront (2003), A&A 412, 567-586, doi:10.1051/0004-6361:20031539.
+_P03_ECLIPTIC_ANGLES = {
+    "phi": (0.0, 5038.481507, -1.0790069, -0.00114045, 0.000132851, -9.51e-8),
+    "omega": (
+        84381.406,
+        -0.025754,
+        0.0512623,
+        -0.00772503,
+        -4.67e-7,
+        3.337e-7,
+    ),
+    "epsilon": (
+        84381.406,
+        -46.836769,
+        -0.0001831,
+        0.00200340,
+        -5.76e-7,
+        -4.34e-8,
+    ),
+    "chi": (0.0, 10.556403, -2.3814292, -0.00121197, 0.000170663, -5.60e-8),
 }
 
 
 def _precession(t: float, name: str) -> float:
-    return _dot(_P03[name], _powers(t, 5)) / ARCSEC_PER_RADIAN
+    coefficients = _P03_ECLIPTIC_ANGLES[name]
+    value = coefficients[-1]
+    for coefficient in reversed(coefficients[:-1]):
+        value = value * t + coefficient
+    return value / ARCSEC_PER_RADIAN
 
 
-def _rotate_spherical(
-    longitude: float, latitude: float, radius: float, angle: float
+def _rotate_x(
+    vector: tuple[float, float, float], angle: float
 ) -> tuple[float, float, float]:
-    result_longitude = math.atan2(
-        math.sin(longitude) * math.cos(angle)
-        - math.tan(latitude) * math.sin(angle),
-        math.cos(longitude),
-    ) % (2.0 * math.pi)
-    result_latitude = math.asin(
-        math.cos(angle) * math.sin(latitude)
-        + math.sin(angle) * math.cos(latitude) * math.sin(longitude)
-    )
-    return result_longitude, result_latitude, radius
+    x, y, z = vector
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    return x, cosine * y - sine * z, sine * y + cosine * z
+
+
+def _rotate_z(
+    vector: tuple[float, float, float], angle: float
+) -> tuple[float, float, float]:
+    x, y, z = vector
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    return cosine * x - sine * y, sine * x + cosine * y, z
 
 
 def _date_ecliptic_to_j2000(
     t: float, longitude: float, latitude: float, radius: float
 ) -> tuple[float, float, float]:
-    longitude, latitude, radius = _rotate_spherical(
-        longitude, latitude, radius, _precession(t, "E")
+    """Rotate P03 mean ecliptic-of-date coordinates to J2000 ecliptic."""
+
+    cosine_latitude = math.cos(latitude)
+    vector = (
+        cosine_latitude * math.cos(longitude),
+        cosine_latitude * math.sin(longitude),
+        math.sin(latitude),
     )
-    longitude += _precession(t, "x")
-    longitude, latitude, radius = _rotate_spherical(
-        longitude, latitude, radius, -_precession(t, "w")
+    # P03: R3(-phi) R1(-omega) R3(chi) R1(epsilon).
+    vector = _rotate_x(vector, _precession(t, "epsilon"))
+    vector = _rotate_z(vector, _precession(t, "chi"))
+    vector = _rotate_x(vector, -_precession(t, "omega"))
+    x, y, z = _rotate_z(vector, -_precession(t, "phi"))
+    return (
+        math.atan2(y, x) % (2.0 * math.pi),
+        math.atan2(z, math.hypot(x, y)),
+        radius,
     )
-    longitude = (longitude - _precession(t, "fi")) % (2.0 * math.pi)
-    return longitude, latitude, radius
 
 
 def _xl1_coordinate(coordinate: int, t: float) -> float:

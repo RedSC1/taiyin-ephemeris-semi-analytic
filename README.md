@@ -94,6 +94,10 @@ Steve Moshier's PLAN404 was an important inspiration for the compact
 semi-analytical representation and harmonic-recursion evaluator used here.
 The planetary series were developed by fitting to JPL DE441.
 
+The lunar ecliptic-of-date coordinates are rotated to the J2000 ecliptic with
+the published [P03 precession model](https://doi.org/10.1051/0004-6361:20031539)
+of Capitaine, Wallace, and Chapront.
+
 ## Files
 
 - `taiyin_semi_analytic/core.py`: evaluator and public implementation.
