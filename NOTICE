@@ -1,0 +1,13 @@
+Taiyin Ephemeris
+Copyright 2026 Taiyin Ephemeris contributors
+
+This product includes a truncated lunar theory coefficient table from
+Shouxing Astronomical Ephemeris (寿星天文历, also known as 寿星万年历),
+originally authored by 许剑伟.
+
+Data or algorithms are sourced from Shouxing Astronomical Ephemeris
+(数据或算法来源于寿星天文历).  The upstream project permits use of its code,
+algorithms, and data subject to its own published provenance statement.
+The frozen XL1 coefficient table is separately identified in
+coefficients.py.  The DE441 residual correction and the non-lunar planetary
+series were independently fitted by this project and are not Shouxing data.

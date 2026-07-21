@@ -1,0 +1,90 @@
+# Taiyin Ephemeris Python demo
+
+A frozen-coefficient semi-analytical ephemeris covering calendar years
+−3000 through +3000.  It has no runtime data files and uses only the Python
+standard library.
+
+- Mercury through Pluto and the Earth–Moon barycenter use compact series
+  independently fitted to JPL DE441.
+- The Moon uses the truncated XL1 lunar theory table from Shouxing
+  Astronomical Ephemeris (寿星天文历/寿星万年历), followed by an independently
+  fitted DE441 residual correction.
+- Earth and Moon heliocentric positions are reconstructed from the EMB and
+  the geocentric lunar vector.
+
+## Command line
+
+The input epoch is Julian Date on the TDB time scale:
+
+```bash
+python3 ephemeris.py 2451545.0 301
+```
+
+The command prints JSON containing:
+
+- `xyz_km`: heliocentric ICRF Cartesian coordinates in kilometres;
+- `lbr_rad_km`: spherical longitude, latitude and radius derived from that
+  same ICRF vector, in radians, radians and kilometres;
+- explicit target, center and frame metadata.
+
+## Python API
+
+```python
+from ephemeris import lbr, position, result
+
+xyz = position(2451545.0, 4)  # Mars
+spherical = lbr(2451545.0, 4)
+record = result(2451545.0, 4)
+```
+
+Supported target IDs:
+
+| ID | Target |
+|---:|---|
+| 1 | Mercury |
+| 2 | Venus |
+| 3 | Earth–Moon barycenter |
+| 4 | Mars |
+| 5 | Jupiter system barycenter |
+| 6 | Saturn system barycenter |
+| 7 | Uranus system barycenter |
+| 8 | Neptune system barycenter |
+| 9 | Pluto system barycenter |
+| 10 | Sun |
+| 301 | Moon |
+| 399 | Earth |
+
+All returned vectors are Sun-centered.  IDs 301 and 399 are therefore also
+heliocentric, not geocentric.
+
+## Accuracy
+
+Held-out validation against DE441 over calendar years −3000 through +3000
+gave the following heliocentric angular RMS values for the frozen planetary
+series:
+
+| Target | RMS |
+|---|---:|
+| Mercury | 1.66″ |
+| Venus | 0.66″ |
+| EMB | 0.56″ |
+| Mars | 2.29″ |
+| Jupiter | 3.31″ |
+| Saturn | 0.29″ |
+| Uranus | 3.65″ |
+| Neptune | 0.21″ |
+| Pluto | 1.53″ |
+
+The corrected geocentric lunar model measured 0.704″ angular RMS and
+0.263 km radial RMS on held-out 32-day-grid epochs; maximum errors on that
+grid were 5.22″ and 1.52 km.
+
+## Files
+
+- `ephemeris.py`: evaluator, public API and command-line entry point.
+- `coefficients.py`: frozen planetary, lunar and correction coefficients.
+- `tests/test_ephemeris.py`: standard-library regression tests.
+- `NOTICE`: attribution and third-party provenance.
+
+The project is licensed under Apache License 2.0.  The attributed Shouxing
+lunar table retains its upstream provenance notice; see `NOTICE`.
