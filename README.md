@@ -32,19 +32,32 @@ python3 ephemeris.py 2451545.0 301
 The command prints JSON containing:
 
 - `xyz_km`: heliocentric ICRF Cartesian coordinates in kilometres;
-- `lbr_rad_km`: spherical longitude, latitude and radius derived from that
-  same ICRF vector, in radians, radians and kilometres;
+- `spherical_icrf_rad_km`: spherical longitude, latitude and radius derived
+  from that same ICRF vector, in radians, radians and kilometres;
+- `ecliptic_lbr_j2000_rad_km`: J2000 ecliptic longitude, latitude and radius,
+  in radians, radians and kilometres;
 - explicit target, center and frame metadata.
 
 ## Python API
 
 ```python
-from taiyin_semi_analytic import lbr, position, result
+from taiyin_semi_analytic import (
+    ecliptic_lbr_j2000,
+    position,
+    result,
+    spherical_icrf,
+)
 
 xyz = position(2451545.0, 4)  # Mars
-spherical = lbr(2451545.0, 4)
+icrf_spherical = spherical_icrf(2451545.0, 4)
+ecliptic_lbr = ecliptic_lbr_j2000(2451545.0, 4)
 record = result(2451545.0, 4)
 ```
+
+Both spherical functions return `(longitude, latitude, radius)`.  Angles are
+in radians and radius is in kilometres.  `spherical_icrf()` uses the ICRF axes;
+`ecliptic_lbr_j2000()` returns the conventional L/B/R coordinates referred to
+the J2000 mean ecliptic and equinox.
 
 Supported target IDs:
 

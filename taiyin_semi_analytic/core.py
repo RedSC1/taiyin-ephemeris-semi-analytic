@@ -4,8 +4,9 @@
 Usage:
     python3 ephemeris.py JD_TDB TARGET_ID
 
-The returned Cartesian and spherical coordinates describe the same
-heliocentric ICRF vector.  Distances are kilometres and angles are radians.
+The returned coordinates are heliocentric.  Cartesian coordinates use ICRF;
+spherical coordinates are available in both ICRF and the J2000 ecliptic frame.
+Distances are kilometres and angles are radians.
 """
 
 from __future__ import annotations
@@ -452,15 +453,25 @@ def _vector_lbr(vector: Sequence[float]) -> tuple[float, float, float]:
     return math.atan2(y, x) % (2.0 * math.pi), math.asin(z / radius), radius
 
 
-def lbr(jd_tdb: float, body_id: int) -> tuple[float, float, float]:
+def spherical_icrf(jd_tdb: float, body_id: int) -> tuple[float, float, float]:
     """Return ICRF spherical longitude, latitude (rad), and radius (km)."""
 
     return _vector_lbr(position(jd_tdb, body_id))
 
 
+def ecliptic_lbr_j2000(
+    jd_tdb: float, body_id: int
+) -> tuple[float, float, float]:
+    """Return J2000 ecliptic longitude, latitude (rad), and radius (km)."""
+
+    return _vector_lbr(_heliocentric_ecliptic(body_id, float(jd_tdb)))
+
+
 def result(jd_tdb: float, body_id: int) -> dict:
-    xyz = position(jd_tdb, body_id)
+    ecliptic_xyz = _heliocentric_ecliptic(body_id, float(jd_tdb))
+    xyz = _ecliptic_to_icrf(ecliptic_xyz)
     spherical = _vector_lbr(xyz)
+    ecliptic = _vector_lbr(ecliptic_xyz)
     return {
         "jd_tdb": float(jd_tdb),
         "target_id": body_id,
@@ -469,7 +480,8 @@ def result(jd_tdb: float, body_id: int) -> dict:
         "center": "sun",
         "frame": "ICRF",
         "xyz_km": list(xyz),
-        "lbr_rad_km": list(spherical),
+        "spherical_icrf_rad_km": list(spherical),
+        "ecliptic_lbr_j2000_rad_km": list(ecliptic),
     }
 
 

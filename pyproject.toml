@@ -30,6 +30,11 @@ classifiers = [
 [project.scripts]
 taiyin-semi-analytic = "taiyin_semi_analytic.core:main"
 
+[project.urls]
+Homepage = "https://github.com/RedSC1/taiyin-ephemeris-semi-analytic"
+Repository = "https://github.com/RedSC1/taiyin-ephemeris-semi-analytic.git"
+Issues = "https://github.com/RedSC1/taiyin-ephemeris-semi-analytic/issues"
+
 [tool.setuptools.packages.find]
 include = ["taiyin_semi_analytic*"]
 

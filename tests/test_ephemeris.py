@@ -73,10 +73,26 @@ class EphemerisTests(unittest.TestCase):
         for left, right in zip(reconstructed, emb):
             self.assertAlmostEqual(left, right, delta=3.0e-8)
 
-    def test_spherical_coordinates_match_cartesian_vector(self):
+    def test_spherical_icrf_matches_cartesian_vector(self):
         for body_id in (1, 3, 6, 301, 399):
             xyz = ephemeris.position(2451545.0, body_id)
-            longitude, latitude, radius = ephemeris.lbr(2451545.0, body_id)
+            longitude, latitude, radius = ephemeris.spherical_icrf(
+                2451545.0, body_id
+            )
+            reconstructed = (
+                radius * math.cos(latitude) * math.cos(longitude),
+                radius * math.cos(latitude) * math.sin(longitude),
+                radius * math.sin(latitude),
+            )
+            for left, right in zip(reconstructed, xyz):
+                self.assertAlmostEqual(left, right, delta=1.0e-6)
+
+    def test_ecliptic_lbr_j2000_matches_ecliptic_vector(self):
+        for body_id in (1, 3, 6, 301, 399):
+            xyz = ephemeris._heliocentric_ecliptic(body_id, 2451545.0)
+            longitude, latitude, radius = ephemeris.ecliptic_lbr_j2000(
+                2451545.0, body_id
+            )
             reconstructed = (
                 radius * math.cos(latitude) * math.cos(longitude),
                 radius * math.cos(latitude) * math.sin(longitude),
@@ -97,7 +113,16 @@ class EphemerisTests(unittest.TestCase):
         self.assertEqual(record["center_id"], 10)
         self.assertEqual(record["frame"], "ICRF")
         self.assertEqual(len(record["xyz_km"]), 3)
-        self.assertEqual(len(record["lbr_rad_km"]), 3)
+        self.assertEqual(len(record["spherical_icrf_rad_km"]), 3)
+        self.assertEqual(len(record["ecliptic_lbr_j2000_rad_km"]), 3)
+
+    def test_result_evaluates_ephemeris_once(self):
+        evaluator = ephemeris._heliocentric_ecliptic
+        with patch.object(
+            ephemeris, "_heliocentric_ecliptic", wraps=evaluator
+        ) as wrapped:
+            ephemeris.result(2451545.0, 4)
+        self.assertEqual(wrapped.call_count, 1)
 
     def test_interval_is_enforced(self):
         with self.assertRaises(ValueError):
