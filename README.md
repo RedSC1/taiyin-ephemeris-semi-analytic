@@ -1,8 +1,8 @@
-# Taiyin Ephemeris Python demo
+# Taiyin Semi-Analytical Ephemeris
 
 A frozen-coefficient semi-analytical ephemeris covering calendar years
-−3000 through +3000.  It has no runtime data files and uses only the Python
-standard library.
+−3000 through +3000. It has no runtime data files, uses only the Python
+standard library, and is published as `taiyin-ephemeris-semi-analytic`.
 
 - Mercury through Pluto and the Earth–Moon barycenter use compact series
   independently fitted to JPL DE441.
@@ -15,6 +15,13 @@ standard library.
 ## Command line
 
 The input epoch is Julian Date on the TDB time scale:
+
+```bash
+pip install taiyin-ephemeris-semi-analytic
+taiyin-semi-analytic 2451545.0 301
+```
+
+From a source checkout, the original one-file-style demo command remains:
 
 ```bash
 python3 ephemeris.py 2451545.0 301
@@ -30,7 +37,7 @@ The command prints JSON containing:
 ## Python API
 
 ```python
-from ephemeris import lbr, position, result
+from taiyin_semi_analytic import lbr, position, result
 
 xyz = position(2451545.0, 4)  # Mars
 spherical = lbr(2451545.0, 4)
@@ -81,8 +88,11 @@ grid were 5.22″ and 1.52 km.
 
 ## Files
 
-- `ephemeris.py`: evaluator, public API and command-line entry point.
-- `coefficients.py`: frozen planetary, lunar and correction coefficients.
+- `taiyin_semi_analytic/core.py`: evaluator and public implementation.
+- `taiyin_semi_analytic/coefficients.py`: frozen coefficients.
+- `taiyin_semi_analytic/__main__.py`: `python -m taiyin_semi_analytic` entry.
+- `ephemeris.py`: source-tree command-line demo wrapper.
+- `pyproject.toml`: wheel/sdist and console-script configuration.
 - `tests/test_ephemeris.py`: standard-library regression tests.
 - `NOTICE`: attribution and third-party provenance.
 

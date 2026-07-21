@@ -9,7 +9,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import ephemeris
+import taiyin_semi_analytic.core as ephemeris
 
 
 class EphemerisTests(unittest.TestCase):
