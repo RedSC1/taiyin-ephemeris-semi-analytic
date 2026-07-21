@@ -6,6 +6,8 @@ standard library, and is published as `taiyin-ephemeris-semi-analytic`.
 
 - Mercury through Pluto and the Earth–Moon barycenter use compact series
   independently fitted to JPL DE441.
+- Planetary harmonics are generated from one sine/cosine pair per fundamental
+  angle, so periodic terms require only multiplication and addition.
 - The Moon uses the truncated XL1 lunar theory table from Shouxing
   Astronomical Ephemeris (寿星天文历/寿星万年历), followed by an independently
   fitted DE441 residual correction.

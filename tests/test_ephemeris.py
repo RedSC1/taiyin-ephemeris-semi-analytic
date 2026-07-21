@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,13 +16,37 @@ import taiyin_semi_analytic.core as ephemeris
 class EphemerisTests(unittest.TestCase):
     def test_frozen_mercury_regression(self):
         expected = (
-            -19462192.307992253,
-            -59927766.037858255,
-            -29992780.805886015,
+            -19462192.30799237,
+            -59927766.037858136,
+            -29992780.80588731,
         )
         actual = ephemeris.position(2451545.0, 1)
         for left, right in zip(actual, expected):
             self.assertAlmostEqual(left, right, delta=1.0e-6)
+
+    def test_planets_reuse_fundamental_angle_harmonics(self):
+        expected_trigonometric_calls = {
+            1: 14,
+            2: 14,
+            3: 24,
+            4: 18,
+            5: 12,
+            6: 12,
+            7: 12,
+            8: 12,
+            9: 14,
+        }
+        original_sine = ephemeris.math.sin
+        original_cosine = ephemeris.math.cos
+        for body_id, expected in expected_trigonometric_calls.items():
+            with patch.object(
+                ephemeris.math, "sin", side_effect=original_sine
+            ) as sine:
+                with patch.object(
+                    ephemeris.math, "cos", side_effect=original_cosine
+                ) as cosine:
+                    ephemeris.position(2451545.0, body_id)
+            self.assertEqual(sine.call_count + cosine.call_count, expected)
 
     def test_frozen_lunar_base_regression(self):
         expected = (3.897650093444056, 0.09024898586276324, 402448.7431750884)

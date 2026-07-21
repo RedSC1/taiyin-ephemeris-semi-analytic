@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from typing import Sequence
+from typing import Any, Sequence
 
 from .coefficients import LUNAR_CORRECTION, LUNAR_XL1, PLANET_MODELS
 
@@ -21,6 +21,8 @@ from .coefficients import LUNAR_CORRECTION, LUNAR_XL1, PLANET_MODELS
 J2000 = 2451545.0
 ARCSEC_PER_RADIAN = 206264.80624709636
 J2000_OBLIQUITY = math.radians(84381.406 / 3600.0)
+J2000_OBLIQUITY_COSINE = math.cos(J2000_OBLIQUITY)
+J2000_OBLIQUITY_SINE = math.sin(J2000_OBLIQUITY)
 EARTH_MOON_MASS_RATIO = 81.30056822149722
 
 BODY_NAMES = {
@@ -60,6 +62,107 @@ def _dot(left: Sequence[float], right: Sequence[float]) -> float:
     return sum(a * b for a, b in zip(left, right))
 
 
+def _compile_planet_runtime(model: dict[str, Any]) -> tuple[Any, ...]:
+    """Flatten a frozen model into the layout used by the hot evaluator."""
+
+    body_id = model["body_id"]
+    angle_body_ids = tuple(model["angle_body_ids"])
+    angle_indices = {
+        argument_id: index for index, argument_id in enumerate(angle_body_ids)
+    }
+    max_harmonics = [0] * len(angle_body_ids)
+    carrier_max_harmonic = 0
+    cursor = model["secular_degree"] + 1
+    arguments = []
+
+    for argument in model["arguments"]:
+        factors = tuple(
+            (body, multiplier) for body, multiplier in argument["factors"]
+        )
+        carrier_multiplier = 0
+        if (
+            model["pure_target_carrier"] is not None
+            and len(factors) == 1
+            and factors[0][0] == body_id
+        ):
+            carrier_multiplier = factors[0][1]
+            carrier_max_harmonic = max(
+                carrier_max_harmonic, abs(carrier_multiplier)
+            )
+            compiled_factors = ()
+        else:
+            compiled_factors = tuple(
+                (angle_indices[argument_id], abs(multiplier) - 1, multiplier < 0)
+                for argument_id, multiplier in factors
+            )
+            for angle_index, harmonic, _ in compiled_factors:
+                max_harmonics[angle_index] = max(
+                    max_harmonics[angle_index], harmonic + 1
+                )
+
+        degree = argument["amplitude_degree"]
+        width = 2 * (degree + 1)
+        amplitude_rows = tuple(
+            tuple(row) for row in model["coefficients"][cursor : cursor + width]
+        )
+        amplitudes = tuple(
+            tuple(
+                complex(
+                    amplitude_rows[2 * power][column],
+                    -amplitude_rows[2 * power + 1][column],
+                )
+                for power in range(degree + 1)
+            )
+            for column in range(3)
+        )
+        if carrier_multiplier:
+            carrier_harmonic = (abs(carrier_multiplier) - 1, carrier_multiplier < 0)
+        else:
+            carrier_harmonic = None
+        arguments.append((compiled_factors, carrier_harmonic, amplitudes))
+        cursor += width
+
+    if cursor != len(model["coefficients"]):
+        raise RuntimeError("planetary coefficient layout mismatch")
+
+    carrier = model["pure_target_carrier"]
+    carrier_coefficients = None if carrier is None else tuple(carrier["coefficients"])
+    return (
+        tuple(tuple(row) for row in model["angle_coefficients"]),
+        tuple(max_harmonics),
+        tuple(arguments),
+        carrier_coefficients,
+        carrier_max_harmonic,
+    )
+
+
+_PLANET_RUNTIMES = {
+    body_id: _compile_planet_runtime(model) for body_id, model in PLANET_MODELS.items()
+}
+
+_LUNAR_XL1_RUNTIME = tuple(
+    tuple(
+        tuple(tuple(table[index : index + 6]) for index in range(0, len(table), 6))
+        for table in coordinate
+    )
+    for coordinate in LUNAR_XL1
+)
+
+
+def _harmonics(angle: float, maximum: int) -> list[complex]:
+    """Return exp(i*n*angle) using one base sin/cos pair."""
+
+    if maximum == 0:
+        return []
+    base = complex(math.cos(angle), math.sin(angle))
+    harmonics = [base]
+    value = base
+    for _ in range(1, maximum):
+        value *= base
+        harmonics.append(value)
+    return harmonics
+
+
 def _planet_ecliptic(body_id: int, jd_tdb: float) -> tuple[float, float, float]:
     model = PLANET_MODELS[body_id]
     if not model["jd_start"] <= jd_tdb <= model["jd_end"]:
@@ -68,58 +171,56 @@ def _planet_ecliptic(body_id: int, jd_tdb: float) -> tuple[float, float, float]:
             f"[{model['jd_start']}, {model['jd_end']}]"
         )
     u = (jd_tdb - model["epoch_jd"]) / model["half_span_days"]
-    secular = _powers(u, model["secular_degree"])
     coefficients = model["coefficients"]
-    cursor = model["secular_degree"] + 1
-    channels = [
-        sum(secular[row] * coefficients[row][column] for row in range(cursor))
-        for column in range(3)
-    ]
+    secular_degree = model["secular_degree"]
+    channels = []
+    for column in range(3):
+        value = coefficients[secular_degree][column]
+        for row in range(secular_degree - 1, -1, -1):
+            value = value * u + coefficients[row][column]
+        channels.append(value)
 
-    angle_powers = _powers(u, len(model["angle_coefficients"][0]) - 1)
-    angles = {
-        body: _dot(row, angle_powers)
-        for body, row in zip(model["angle_body_ids"], model["angle_coefficients"])
-    }
-    carrier = model["pure_target_carrier"]
-    carrier_value = None
-    if carrier is not None:
-        carrier_value = _dot(
-            carrier["coefficients"],
-            _powers(u, len(carrier["coefficients"]) - 1),
-        )
+    (
+        angle_coefficients,
+        max_harmonics,
+        arguments,
+        carrier_coefficients,
+        carrier_max_harmonic,
+    ) = _PLANET_RUNTIMES[body_id]
+    harmonic_tables = []
+    for row, maximum in zip(angle_coefficients, max_harmonics):
+        angle = row[-1]
+        for coefficient in reversed(row[:-1]):
+            angle = angle * u + coefficient
+        harmonic_tables.append(_harmonics(angle, maximum))
 
-    for argument in model["arguments"]:
-        factors = argument["factors"]
-        pure_target = (
-            carrier_value is not None
-            and len(factors) == 1
-            and factors[0][0] == body_id
-        )
-        if pure_target:
-            phase = factors[0][1] * carrier_value
+    carrier_harmonics = []
+    if carrier_coefficients is not None and carrier_max_harmonic:
+        carrier_angle = carrier_coefficients[-1]
+        for coefficient in reversed(carrier_coefficients[:-1]):
+            carrier_angle = carrier_angle * u + coefficient
+        carrier_harmonics = _harmonics(carrier_angle, carrier_max_harmonic)
+
+    for factors, carrier_harmonic, amplitudes in arguments:
+        if carrier_harmonic is not None:
+            harmonic, negative = carrier_harmonic
+            phase = carrier_harmonics[harmonic]
+            if negative:
+                phase = phase.conjugate()
         else:
-            phase = sum(multiplier * angles[body] for body, multiplier in factors)
-        degree = argument["amplitude_degree"]
-        width = 2 * (degree + 1)
-        block = coefficients[cursor : cursor + width]
-        amplitude_powers = _powers(u, degree)
-        cosine = math.cos(phase)
-        sine = math.sin(phase)
-        for column in range(3):
-            cosine_amplitude = sum(
-                amplitude_powers[index] * block[2 * index][column]
-                for index in range(degree + 1)
-            )
-            sine_amplitude = sum(
-                amplitude_powers[index] * block[2 * index + 1][column]
-                for index in range(degree + 1)
-            )
-            channels[column] += cosine_amplitude * cosine + sine_amplitude * sine
-        cursor += width
+            phase = 1.0 + 0.0j
+            for angle_index, harmonic, negative in factors:
+                factor = harmonic_tables[angle_index][harmonic]
+                if negative:
+                    factor = factor.conjugate()
+                phase *= factor
 
-    if cursor != len(coefficients):
-        raise RuntimeError("planetary coefficient layout mismatch")
+        for column, polynomial in enumerate(amplitudes):
+            amplitude = polynomial[-1]
+            for coefficient in reversed(polynomial[:-1]):
+                amplitude = amplitude * u + coefficient
+            channels[column] += (amplitude * phase).real
+
     longitude, latitude, log_radius = channels
     radius = model["radius_scale_km"] * math.exp(log_radius)
     cos_latitude = math.cos(latitude)
@@ -200,10 +301,9 @@ def _xl1_coordinate(coordinate: int, t: float) -> float:
     phase_t3 = t * t * t / 1.0e8
     phase_t4 = t * t * t * t / 1.0e8
     envelope = 1.0
-    for table in LUNAR_XL1[coordinate]:
+    for table in _LUNAR_XL1_RUNTIME[coordinate]:
         subtotal = 0.0
-        for index in range(0, len(table), 6):
-            amplitude, p0, p1, p2, p3, p4 = table[index : index + 6]
+        for amplitude, p0, p1, p2, p3, p4 in table:
             phase = p0 + t * p1 + phase_t2 * p2 + phase_t3 * p3 + phase_t4 * p4
             subtotal += amplitude * math.cos(phase)
         value += envelope * subtotal
@@ -299,9 +399,11 @@ def _heliocentric_ecliptic(body_id: int, jd_tdb: float) -> tuple[float, float, f
 
 def _ecliptic_to_icrf(vector: Sequence[float]) -> tuple[float, float, float]:
     x, y, z = vector
-    cosine = math.cos(J2000_OBLIQUITY)
-    sine = math.sin(J2000_OBLIQUITY)
-    return x, cosine * y - sine * z, sine * y + cosine * z
+    return (
+        x,
+        J2000_OBLIQUITY_COSINE * y - J2000_OBLIQUITY_SINE * z,
+        J2000_OBLIQUITY_SINE * y + J2000_OBLIQUITY_COSINE * z,
+    )
 
 
 def position(jd_tdb: float, body_id: int) -> tuple[float, float, float]:
