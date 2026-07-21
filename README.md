@@ -88,6 +88,12 @@ The corrected geocentric lunar model measured 0.704″ angular RMS and
 0.263 km radial RMS on held-out 32-day-grid epochs; maximum errors on that
 grid were 5.22″ and 1.52 km.
 
+## Design lineage
+
+Steve Moshier's PLAN404 was an important inspiration for the compact
+semi-analytical representation and harmonic-recursion evaluator used here.
+The planetary series were developed by fitting to JPL DE441.
+
 ## Files
 
 - `taiyin_semi_analytic/core.py`: evaluator and public implementation.
