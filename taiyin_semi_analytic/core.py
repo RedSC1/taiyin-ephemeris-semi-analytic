@@ -1037,7 +1037,11 @@ def _rotate_z_acceleration(
 def _date_ecliptic_to_j2000_velocity(
     t: float, longitude: tuple[float, float], latitude: tuple[float, float],
     radius: tuple[float, float],
-) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+) -> tuple[
+    tuple[float, float],
+    tuple[float, float],
+    tuple[float, float],
+]:
     longitude_value, longitude_rate = longitude
     latitude_value, latitude_rate = latitude
     radius_value, radius_rate = radius
