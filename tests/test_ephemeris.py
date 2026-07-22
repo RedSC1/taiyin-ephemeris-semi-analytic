@@ -87,6 +87,97 @@ class EphemerisTests(unittest.TestCase):
             for left, right in zip(reconstructed, xyz):
                 self.assertAlmostEqual(left, right, delta=1.0e-6)
 
+    def test_analytic_velocity_and_acceleration(self):
+        epoch = 2451545.0
+        step = 0.01
+        for body_id in (1, 3, 4, 6, 301, 399):
+            pv = ephemeris.position_velocity_icrf(epoch, body_id)
+            pva = ephemeris.position_velocity_acceleration_icrf(epoch, body_id)
+            position = ephemeris.position(epoch, body_id)
+            for left, right in zip(pv.position_km, position):
+                self.assertAlmostEqual(left, right, delta=1.0e-6)
+            for left, right in zip(pva.position_km, pv.position_km):
+                self.assertAlmostEqual(left, right, delta=1.0e-6)
+            velocity_fd = tuple(
+                (left - right) / (2.0 * step)
+                for left, right in zip(
+                    ephemeris.position(epoch + step, body_id),
+                    ephemeris.position(epoch - step, body_id),
+                )
+            )
+            for left, right in zip(pv.velocity_km_per_day, velocity_fd):
+                self.assertAlmostEqual(left, right, delta=0.5)
+            velocity_plus = ephemeris.position_velocity_icrf(
+                epoch + step, body_id
+            ).velocity_km_per_day
+            velocity_minus = ephemeris.position_velocity_icrf(
+                epoch - step, body_id
+            ).velocity_km_per_day
+            acceleration_fd = tuple(
+                (left - right) / (2.0 * step)
+                for left, right in zip(velocity_plus, velocity_minus)
+            )
+            for left, right in zip(
+                pva.acceleration_km_per_day2, acceleration_fd
+            ):
+                self.assertAlmostEqual(left, right, delta=0.1)
+
+    def test_derivative_frames_share_the_fixed_j2000_rotation(self):
+        epoch = 2451545.0
+        cosine = ephemeris.J2000_OBLIQUITY_COSINE
+        sine = ephemeris.J2000_OBLIQUITY_SINE
+
+        def rotate(vector):
+            return (
+                vector[0],
+                cosine * vector[1] - sine * vector[2],
+                sine * vector[1] + cosine * vector[2],
+            )
+
+        ecliptic = ephemeris.position_velocity_acceleration_ecliptic_j2000(
+            epoch, 4
+        )
+        icrf = ephemeris.position_velocity_acceleration_icrf(epoch, 4)
+        for ecliptic_vector, icrf_vector in (
+            (ecliptic.position_km, icrf.position_km),
+            (ecliptic.velocity_km_per_day, icrf.velocity_km_per_day),
+            (ecliptic.acceleration_km_per_day2, icrf.acceleration_km_per_day2),
+        ):
+            for left, right in zip(rotate(ecliptic_vector), icrf_vector):
+                self.assertAlmostEqual(left, right, delta=1.0e-8)
+
+    def test_single_derivative_outputs_match_full_state(self):
+        epoch = 2451545.0
+        for body_id in (1, 4, 301, 399):
+            pv_ecliptic = ephemeris.position_velocity_ecliptic_j2000(
+                epoch, body_id
+            )
+            pv_icrf = ephemeris.position_velocity_icrf(epoch, body_id)
+            pva_ecliptic = (
+                ephemeris.position_velocity_acceleration_ecliptic_j2000(
+                    epoch, body_id
+                )
+            )
+            pva_icrf = ephemeris.position_velocity_acceleration_icrf(
+                epoch, body_id
+            )
+            self.assertEqual(
+                ephemeris.velocity_ecliptic_j2000(epoch, body_id),
+                pv_ecliptic.velocity_km_per_day,
+            )
+            self.assertEqual(
+                ephemeris.velocity_icrf(epoch, body_id),
+                pv_icrf.velocity_km_per_day,
+            )
+            self.assertEqual(
+                ephemeris.acceleration_ecliptic_j2000(epoch, body_id),
+                pva_ecliptic.acceleration_km_per_day2,
+            )
+            self.assertEqual(
+                ephemeris.acceleration_icrf(epoch, body_id),
+                pva_icrf.acceleration_km_per_day2,
+            )
+
     def test_ecliptic_lbr_j2000_matches_ecliptic_vector(self):
         for body_id in (1, 3, 6, 301, 399):
             xyz = ephemeris._heliocentric_ecliptic(body_id, 2451545.0)

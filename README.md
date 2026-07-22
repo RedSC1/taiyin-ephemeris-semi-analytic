@@ -42,15 +42,23 @@ The command prints JSON containing:
 
 ```python
 from taiyin_semi_analytic import (
+    acceleration_icrf,
+    position_velocity_acceleration_icrf,
+    position_velocity_icrf,
     ecliptic_lbr_j2000,
     position,
     result,
     spherical_icrf,
+    velocity_icrf,
 )
 
 xyz = position(2451545.0, 4)  # Mars
 icrf_spherical = spherical_icrf(2451545.0, 4)
 ecliptic_lbr = ecliptic_lbr_j2000(2451545.0, 4)
+pv = position_velocity_icrf(2451545.0, 4)
+pva = position_velocity_acceleration_icrf(2451545.0, 4)
+v = velocity_icrf(2451545.0, 4)
+a = acceleration_icrf(2451545.0, 4)
 record = result(2451545.0, 4)
 ```
 
@@ -58,6 +66,27 @@ Both spherical functions return `(longitude, latitude, radius)`.  Angles are
 in radians and radius is in kilometres.  `spherical_icrf()` uses the ICRF axes;
 `ecliptic_lbr_j2000()` returns the conventional L/B/R coordinates referred to
 the J2000 mean ecliptic and equinox.
+
+The full derivative APIs return named tuples with Cartesian position in
+kilometres, velocity in kilometres/day, and acceleration in kilometres/day².
+If only one derivative is needed, `velocity_icrf()` /
+`velocity_ecliptic_j2000()` return a plain three-element velocity tuple, while
+`acceleration_icrf()` / `acceleration_ecliptic_j2000()` return a plain
+three-element acceleration tuple.  The corresponding
+`position_velocity_ecliptic_j2000()` and
+`position_velocity_acceleration_ecliptic_j2000()` functions return the full
+quantities in the J2000 ecliptic frame.  All derivatives are with respect to
+the TDB Julian Date and are analytic derivatives of the fitted series.  The
+derivative APIs intentionally use Cartesian XYZ only; the spherical and L/B/R
+functions above are position-only APIs.  This avoids ambiguous longitude
+wrapping and singular latitude rates.  If spherical rates are needed, convert
+the returned Cartesian state with the application's own coordinate convention.
+The planetary, P03, and lunar phase-polynomial derivative tables are frozen in
+the package; the hot path then evaluates ordinary floating-point Horner
+polynomials and trigonometric chain rules.  A private Jet implementation is
+kept under `legacy/reference_jet.py` only as a numerical cross-check during
+development.  Position, velocity, and acceleration use separate scalar
+evaluators; the combined named-tuple APIs are only convenience wrappers.
 
 Supported target IDs:
 
@@ -115,6 +144,8 @@ of Capitaine, Wallace, and Chapront.
 
 - `taiyin_semi_analytic/core.py`: evaluator and public implementation.
 - `taiyin_semi_analytic/coefficients.py`: frozen coefficients.
+- `taiyin_semi_analytic/derivative_coefficients.py`: frozen first- and
+  second-derivative coefficient tables generated from the fitted coefficients.
 - `taiyin_semi_analytic/__main__.py`: `python -m taiyin_semi_analytic` entry.
 - `ephemeris.py`: source-tree command-line demo wrapper.
 - `pyproject.toml`: wheel/sdist and console-script configuration.
